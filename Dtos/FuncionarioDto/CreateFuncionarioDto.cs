@@ -1,13 +1,9 @@
-using System.ComponentModel.DataAnnotations;
+﻿using System.ComponentModel.DataAnnotations;
 
-namespace TrilhaApiDesafio.Entities
+namespace TrilhaApiDesafio.Dtos
 {
-    /// <summary>
-    /// Entidade que ilustra um funcionário com suas principais informações, como nome, e-mail e telefone.
-    /// </summary>
-    public class Funcionario
+    public class CreateFuncionarioDto
     {
-        [Key]
         public int Id { get; set; }
         [Required(ErrorMessage = "Campo obrigatório")]
         public string Nome { get; set; }

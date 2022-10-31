@@ -22,7 +22,7 @@ namespace TrilhaApiDesafio.Migrations
 
             SqlServerModelBuilderExtensions.UseIdentityColumns(modelBuilder, 1L, 1);
 
-            modelBuilder.Entity("TrilhaApiDesafio.Models.Funcionario", b =>
+            modelBuilder.Entity("TrilhaApiDesafio.Entities.Funcionario", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
@@ -31,12 +31,15 @@ namespace TrilhaApiDesafio.Migrations
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"), 1L, 1);
 
                     b.Property<string>("Email")
+                        .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("Nome")
+                        .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("Telefone")
+                        .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
                     b.HasKey("Id");
@@ -44,7 +47,7 @@ namespace TrilhaApiDesafio.Migrations
                     b.ToTable("Funcionarios");
                 });
 
-            modelBuilder.Entity("TrilhaApiDesafio.Models.HistoricoTarefa", b =>
+            modelBuilder.Entity("TrilhaApiDesafio.Entities.HistoricoTarefa", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
@@ -66,10 +69,14 @@ namespace TrilhaApiDesafio.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("FuncionarioId");
+
+                    b.HasIndex("TarefaId");
+
                     b.ToTable("HistoricoTarefas");
                 });
 
-            modelBuilder.Entity("TrilhaApiDesafio.Models.Tarefa", b =>
+            modelBuilder.Entity("TrilhaApiDesafio.Entities.Tarefa", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
@@ -90,11 +97,56 @@ namespace TrilhaApiDesafio.Migrations
                         .HasColumnType("int");
 
                     b.Property<string>("Titulo")
+                        .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
                     b.HasKey("Id");
 
+                    b.HasIndex("FuncionarioId");
+
                     b.ToTable("Tarefas");
+                });
+
+            modelBuilder.Entity("TrilhaApiDesafio.Entities.HistoricoTarefa", b =>
+                {
+                    b.HasOne("TrilhaApiDesafio.Entities.Funcionario", "Funcionario")
+                        .WithMany("HistoricoTarefas")
+                        .HasForeignKey("FuncionarioId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("TrilhaApiDesafio.Entities.Tarefa", "Tarefa")
+                        .WithMany("HistoricoTarefas")
+                        .HasForeignKey("TarefaId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Funcionario");
+
+                    b.Navigation("Tarefa");
+                });
+
+            modelBuilder.Entity("TrilhaApiDesafio.Entities.Tarefa", b =>
+                {
+                    b.HasOne("TrilhaApiDesafio.Entities.Funcionario", "Funcionario")
+                        .WithMany("Tarefas")
+                        .HasForeignKey("FuncionarioId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Funcionario");
+                });
+
+            modelBuilder.Entity("TrilhaApiDesafio.Entities.Funcionario", b =>
+                {
+                    b.Navigation("HistoricoTarefas");
+
+                    b.Navigation("Tarefas");
+                });
+
+            modelBuilder.Entity("TrilhaApiDesafio.Entities.Tarefa", b =>
+                {
+                    b.Navigation("HistoricoTarefas");
                 });
 #pragma warning restore 612, 618
         }

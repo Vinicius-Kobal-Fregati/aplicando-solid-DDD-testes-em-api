@@ -2,6 +2,8 @@ using Microsoft.AspNetCore.Mvc;
 using TrilhaApiDesafio.Context;
 using TrilhaApiDesafio.Models;
 using TrilhaApiDesafio.Entities;
+using AutoMapper;
+using TrilhaApiDesafio.Dtos;
 
 namespace TrilhaApiDesafio.Controllers
 {
@@ -10,18 +12,20 @@ namespace TrilhaApiDesafio.Controllers
     /// requisição e do que foi passado.
     /// </summary>
     [ApiController]
-    [Route("HistoricoTarefa")]
+    [Route("[controller]")]
     public class HistoricoTarefaController : ControllerBase
     {
         private readonly OrganizadorContext _context;
+        private IMapper _mapper;
 
         /// <summary>
         /// Construtor da controller funcionario.
         /// </summary>
         /// <param name="context">Contexto passado a controller.</param>
-        public HistoricoTarefaController(OrganizadorContext context)
+        public HistoricoTarefaController(OrganizadorContext context, IMapper mapper)
         {
             _context = context;
+            _mapper = mapper;
         }
 
         /// <summary>
@@ -32,12 +36,13 @@ namespace TrilhaApiDesafio.Controllers
         [HttpGet("{idTarefa}")]
         public IActionResult ObterHistoricoPorIdDaTarefa(int idTarefa)
         {
-            var historico = _context.HistoricoTarefas.Where(item => item.TarefaId == idTarefa);
+            var historico = _context.HistoricoTarefas.Where(item => item.TarefaId == idTarefa).ToList();
+            List<ReadHistoricoTarefaDto> readDto = _mapper.Map<List<ReadHistoricoTarefaDto>>(historico);
 
-            if (historico == null || historico.Count() == 0)
-                return NotFound(new { Error = Textos.NaoEncontrado("Histórico")} );
+            if (readDto == null)
+                return NotFound(new { Error = Textos.NaoNulo("Histórico")} );
 
-            return Ok(historico);
+            return Ok(readDto);
         }
 
         /// <summary>

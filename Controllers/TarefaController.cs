@@ -2,6 +2,8 @@ using Microsoft.AspNetCore.Mvc;
 using TrilhaApiDesafio.Context;
 using TrilhaApiDesafio.Models;
 using TrilhaApiDesafio.Entities;
+using AutoMapper;
+using TrilhaApiDesafio.Dtos;
 
 namespace TrilhaApiDesafio.Controllers
 {
@@ -14,6 +16,7 @@ namespace TrilhaApiDesafio.Controllers
     public class TarefaController : ControllerBase
     {
         private readonly OrganizadorContext _context;
+        private IMapper _mapper;
         private FuncionarioController _funcionarioController;
         private HistoricoTarefaController _historicoTarefaController;
 
@@ -22,11 +25,12 @@ namespace TrilhaApiDesafio.Controllers
         /// e _historicoTarefaController. 
         /// </summary>
         /// <param name="context">Contexto passado a controller.</param>
-        public TarefaController(OrganizadorContext context)
+        public TarefaController(OrganizadorContext context, IMapper mapper)
         {
             _context = context;
-            _funcionarioController = new FuncionarioController(context);
-            _historicoTarefaController = new HistoricoTarefaController(context);
+            _mapper = mapper;
+            _funcionarioController = new FuncionarioController(context, mapper);
+            _historicoTarefaController = new HistoricoTarefaController(context, mapper);
         }
 
         /// <summary>
@@ -37,12 +41,13 @@ namespace TrilhaApiDesafio.Controllers
         [HttpGet("{id}")]
         public IActionResult ObterPorId(int id)
         {
-            var tarefa = _context.Tarefas.Find(id);
+            Tarefa tarefa = _context.Tarefas.Find(id);
+            ReadTarefaDtos readDto = _mapper.Map<ReadTarefaDtos>(tarefa);
 
-            if (tarefa == null)
+            if (readDto == null)
                 return NotFound(new { Error = Textos.NaoEncontrado("Tarefa") });
             
-            return Ok(tarefa);
+            return Ok(readDto);
         }
 
         /// <summary>
@@ -136,10 +141,6 @@ namespace TrilhaApiDesafio.Controllers
 
             if (tarefa == null)
                 return BadRequest(new { Erro = Textos.NaoNulo("Tarefa") });
-            else if (tarefa.Titulo == null)
-                return BadRequest(new { Error = Textos.NaoNulo("Título") });
-            else if (tarefa.Titulo == "")
-                return BadRequest(new { Erro = Textos.NaoVazio("Título") });
             else if (dataRecebida < dataAtual)
                 return BadRequest(new { Error = Textos.DataMenorQueAtual() });
 
@@ -168,10 +169,6 @@ namespace TrilhaApiDesafio.Controllers
                 return NotFound();
             else if (tarefa.Data == DateTime.MinValue)
                 return BadRequest(new { Erro = Textos.DataMenorQueMinimo() });
-            else if (tarefa.Titulo == null)
-                return BadRequest(new { Error = Textos.NaoNulo("Título") });
-            else if (tarefa.Titulo == "")
-                return BadRequest(new { Erro = Textos.NaoVazio("Título") });
             else if (dataRecebida < dataAtual)
                 return BadRequest(new { Error = Textos.DataMenorQueAtual() });
 
@@ -206,10 +203,6 @@ namespace TrilhaApiDesafio.Controllers
 
             if (tarefaBanco == null)
                 return NotFound(new { Error = Textos.NaoEncontrado("Tarefa") });
-            else if (titulo == null)
-                return BadRequest(new { Error = Textos.NaoNulo("Título") });
-            else if (titulo == "")
-                return BadRequest(new { Error = Textos.NaoVazio("Título") });
 
             tarefaBanco.Titulo = titulo;
             _context.SaveChanges();
