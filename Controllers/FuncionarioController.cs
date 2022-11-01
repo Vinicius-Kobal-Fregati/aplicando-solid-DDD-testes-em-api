@@ -1,10 +1,10 @@
 using Microsoft.AspNetCore.Mvc;
-using TrilhaApiDesafio.Context;
 using TrilhaApiDesafio.Models;
 using TrilhaApiDesafio.Entities;
 using System.Text.RegularExpressions;
 using TrilhaApiDesafio.Dtos;
 using AutoMapper;
+using TrilhaApiDesafio.Services;
 
 namespace TrilhaApiDesafio.Controllers
 {
@@ -16,17 +16,18 @@ namespace TrilhaApiDesafio.Controllers
     [Route("[controller]")]
     public class FuncionarioController : ControllerBase
     {
-        private readonly OrganizadorContext _context;
         private IMapper _mapper;
+        private IFuncionarioService _funcionario;
 
         /// <summary>
         /// Construtor da controller funcionario.
         /// </summary>
-        /// <param name="context">Contexto passado a controller.</param>
-        public FuncionarioController(OrganizadorContext context, IMapper mapper)
+        /// <param name="mapper"></param>
+        /// <param name="funcionario"></param>
+        public FuncionarioController(IMapper mapper, IFuncionarioService funcionario)
         {
-            _context = context;
             _mapper = mapper;
+            _funcionario = funcionario;
         }
 
         /// <summary>
@@ -36,7 +37,7 @@ namespace TrilhaApiDesafio.Controllers
         [HttpGet("ObterTodos")]
         public IActionResult ObterTodos()
         {
-            var funcionarios = _context.Funcionarios;
+            var funcionarios = _funcionario.ObterTodos();
             
             return Ok(funcionarios);
         }
@@ -49,15 +50,12 @@ namespace TrilhaApiDesafio.Controllers
         [HttpGet("TarefasDoFuncionario/{id}")]
         public IActionResult TarefasDoFuncionario(int id)
         {
-            List<Tarefa> tarefas = _context.Tarefas.ToList();
-            if (tarefas == null)
-                return NotFound();
+            if (_funcionario.ObterPorId(id) == null)
+                return NotFound(new { Error = Textos.NaoEncontrado("Funcionário") });
 
-            IEnumerable<Tarefa> query = from tarefa in tarefas
-                                        where tarefa.FuncionarioId.Equals(id)
-                                        select tarefa;
-            tarefas = query.ToList();
-            List<ReadTarefaDtoSemFuncionarioId> readDto = _mapper.Map<List<ReadTarefaDtoSemFuncionarioId>>(tarefas);
+            IEnumerable<Tarefa> tarefas = _funcionario.TarefasDoFuncionario(id);
+            IEnumerable<ReadTarefaDtoSemFuncionarioId> readDto = 
+                _mapper.Map<IEnumerable<ReadTarefaDtoSemFuncionarioId>>(tarefas);
 
             return Ok(readDto);
         }
@@ -73,7 +71,7 @@ namespace TrilhaApiDesafio.Controllers
             if (id == 0)
                 return NotFound(new {Error = Textos.NaoSelecionado("Funcionário")} );
             
-            var funcionario = _context.Funcionarios.Find(id);
+            var funcionario = _funcionario.ObterPorId(id);
             
             if (VerificaNulo(funcionario))
                 return NotFound(new {Error = Textos.NaoEncontrado("Funcionário")} );
@@ -90,7 +88,8 @@ namespace TrilhaApiDesafio.Controllers
         [HttpGet("ObterPorNome")]
         public IActionResult ObterPorNome(string nome)
         {
-            var funcionarios = _context.Funcionarios.Where(funcionario => funcionario.Nome.Contains(nome));
+            var funcionarios = _funcionario.ObterPorNome(nome);
+
             if (VerificaNulo(funcionarios))
                 return NotFound(new { Error = Textos.NaoEncontrado("Funcionário") });
             else if (funcionarios.Count() == 0)
@@ -108,7 +107,7 @@ namespace TrilhaApiDesafio.Controllers
         [HttpGet("ObterPorEmail")]
         public IActionResult ObterPorEmail(string email)
         {
-            var funcionarios = _context.Funcionarios.Where(funcionario => funcionario.Email.Contains(email));
+            var funcionarios = _funcionario.ObterPorEmail(email);
             if (VerificaNulo(funcionarios))
                 return NotFound(new { Error = Textos.NaoEncontrado("Funcionário") });
             else if (funcionarios.Count() == 0)
@@ -126,7 +125,8 @@ namespace TrilhaApiDesafio.Controllers
         [HttpGet("ObterPorTelefone")]
         public IActionResult ObterPorTelefone(string telefone)
         {
-            var funcionario = _context.Funcionarios.Where(funcionario => funcionario.Telefone.Contains(telefone));
+            var funcionario = _funcionario.ObterPorTelefone(telefone);
+
             if (VerificaNulo(funcionario) || funcionario.Count() == 0)
                 return NotFound(new { Error = Textos.NaoCadastrado("Funcionário") });
 
@@ -147,8 +147,7 @@ namespace TrilhaApiDesafio.Controllers
             else if (!VerificaTelefone(funcionario.Telefone))
                 return BadRequest(new { Error = Textos.TelefoneForaPadrao() });
 
-            _context.Add(funcionario);
-            _context.SaveChanges();
+            _funcionario.CadastrarFuncionario(funcionario);
 
             return CreatedAtAction(nameof(ObterPorId), new { id = funcionario.Id}, funcionario);
         }
@@ -163,10 +162,8 @@ namespace TrilhaApiDesafio.Controllers
         [HttpPut("{id}")]
         public IActionResult AtualizarFuncionario(int id, Funcionario funcionario)
         {
-            var funcionarioBanco = _context.Funcionarios.Find(id);
-
-            if (VerificaNulo(funcionarioBanco))
-                return NotFound(new { Error = Textos.NaoEncontrado("Funcionário") });
+            if (VerificaNulo(funcionario))
+                return BadRequest(new { Error = Textos.NaoNulo("Funcionário") });
             else if (funcionario.Nome == "")
                 return BadRequest(new { Error = Textos.NaoVazio("Nome") });
             else if (NomeJaExistente(funcionario.Nome))
@@ -174,10 +171,10 @@ namespace TrilhaApiDesafio.Controllers
             else if (!VerificaTelefone(funcionario.Telefone))
                 return BadRequest(new { Error = Textos.TelefoneForaPadrao() });
 
-            funcionarioBanco.Nome = funcionario.Nome;
-            funcionarioBanco.Email = funcionario.Email;
-            funcionarioBanco.Telefone = funcionario.Telefone;
-            _context.SaveChanges();
+            var funcionarioBanco = _funcionario.AtualizarFuncionario(id, funcionario);
+
+            if (VerificaNulo(funcionarioBanco))
+                return NotFound(new { Error = Textos.NaoEncontrado("Funcionário") });
             
             return NoContent();
         }
@@ -192,19 +189,17 @@ namespace TrilhaApiDesafio.Controllers
         [HttpPatch("AtualizarNome/{id}")]
         public IActionResult AtualizarNome(int id, string nome)
         {
-            var funcionarioBanco = _context.Funcionarios.Find(id);
-
-            if (VerificaNulo(funcionarioBanco))
-                return NotFound(new { Error = Textos.NaoEncontrado("Funcionário") });
-            else if (VerificaNulo(nome))
+            if (VerificaNulo(nome))
                 return BadRequest(new { Error = Textos.NaoNulo("Nome") });
             else if (nome == "")
                 return BadRequest(new { Error = Textos.NaoVazio("Nome") });
             else if (NomeJaExistente(nome))
                 return BadRequest(new { Error = Textos.JaExistente("Nome") });
 
-            funcionarioBanco.Nome = nome;
-            _context.SaveChanges();
+            Funcionario funcionario = _funcionario.AtualizarNome(id, nome);
+
+            if (VerificaNulo(funcionario))
+                return NotFound(new { Error = Textos.NaoEncontrado("Funcionário") });
 
             return NoContent();
         }
@@ -218,15 +213,16 @@ namespace TrilhaApiDesafio.Controllers
         [HttpPatch("AtualizarEmail/{id}")]
         public IActionResult AtualizarEmail(int id, string email)
         {
-            var funcionarioBanco = _context.Funcionarios.Find(id);
-
-            if (VerificaNulo(funcionarioBanco))
-                return NotFound(new { Error = Textos.NaoEncontrado("Funcionário") });
-            else if (VerificaNulo(email))
+            if (VerificaNulo(email))
                 return BadRequest(new { Error = Textos.NaoNulo("E-mail") });
-            
-            funcionarioBanco.Email = email;
-            _context.SaveChanges();
+            else if (email == "")
+                return BadRequest(new { Error = Textos.NaoVazio("E-mail") });
+
+
+            Funcionario funcionario = _funcionario.AtualizarEmail(id, email);
+
+            if (VerificaNulo(funcionario))
+                return NotFound(new { Error = Textos.NaoEncontrado("Funcionário") });
 
             return NoContent();
         }
@@ -240,17 +236,15 @@ namespace TrilhaApiDesafio.Controllers
         [HttpPatch("AtualizarTelefone/{id}")]
         public IActionResult AtualizarTelefone(int id, string telefone)
         {
-            var funcionarioBanco = _context.Funcionarios.Find(id);
-
-            if (VerificaNulo(funcionarioBanco))
-                return NotFound(new { Error = Textos.NaoEncontrado("Funcionário") });
-            else if (VerificaNulo(telefone))
+            if (VerificaNulo(telefone))
                 return BadRequest(new { Error = Textos.NaoNulo("Telefone") });
             else if (!VerificaTelefone(telefone))
                 return BadRequest(new { Error = Textos.TelefoneForaPadrao() });
 
-            funcionarioBanco.Telefone = telefone;
-            _context.SaveChanges();
+            Funcionario funcionario = _funcionario.AtualizarTelefone(id, telefone);
+
+            if (VerificaNulo(funcionario))
+                return NotFound(new { Error = Textos.NaoEncontrado("Funcionário") });
 
             return NoContent();
         }
@@ -263,13 +257,12 @@ namespace TrilhaApiDesafio.Controllers
         [HttpDelete("{id}")]
         public IActionResult Deletar(int id)
         {
-            var funcionario = _context.Funcionarios.Find(id);
+            var funcionario = _funcionario.ObterPorId(id);
 
             if (VerificaNulo(funcionario))
                 return NotFound(new { Error = Textos.NaoEncontrado("Funcionário") });
 
-            _context.Funcionarios.Remove(funcionario);
-            _context.SaveChanges();
+            _funcionario.Deletar(id);
 
             return NoContent();
         }
@@ -282,7 +275,7 @@ namespace TrilhaApiDesafio.Controllers
         [NonAction]
         public bool NomeJaExistente(string nome)
         {
-            bool nomeRepetido = _context.Funcionarios.Where(x => x.Nome.Contains(nome)).Count() > 0 
+            bool nomeRepetido = _funcionario.ObterTodos().Where(x => x.Nome.Contains(nome)).Count() > 0 
                                 ? true : false;
 
             return nomeRepetido;

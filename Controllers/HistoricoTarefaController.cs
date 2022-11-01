@@ -1,9 +1,9 @@
 using Microsoft.AspNetCore.Mvc;
-using TrilhaApiDesafio.Context;
 using TrilhaApiDesafio.Models;
 using TrilhaApiDesafio.Entities;
 using AutoMapper;
 using TrilhaApiDesafio.Dtos;
+using TrilhaApiDesafio.Services;
 
 namespace TrilhaApiDesafio.Controllers
 {
@@ -15,17 +15,17 @@ namespace TrilhaApiDesafio.Controllers
     [Route("[controller]")]
     public class HistoricoTarefaController : ControllerBase
     {
-        private readonly OrganizadorContext _context;
         private IMapper _mapper;
+        private IHistoricoTarefaService _historico;
 
         /// <summary>
         /// Construtor da controller funcionario.
         /// </summary>
         /// <param name="context">Contexto passado a controller.</param>
-        public HistoricoTarefaController(OrganizadorContext context, IMapper mapper)
+        public HistoricoTarefaController(IMapper mapper, IHistoricoTarefaService historico)
         {
-            _context = context;
             _mapper = mapper;
+            _historico = historico;
         }
 
         /// <summary>
@@ -36,11 +36,11 @@ namespace TrilhaApiDesafio.Controllers
         [HttpGet("{idTarefa}")]
         public IActionResult ObterHistoricoPorIdDaTarefa(int idTarefa)
         {
-            var historico = _context.HistoricoTarefas.Where(item => item.TarefaId == idTarefa).ToList();
-            List<ReadHistoricoTarefaDto> readDto = _mapper.Map<List<ReadHistoricoTarefaDto>>(historico);
+            var historico = _historico.ObterHistoricoPorIdDaTarefa(idTarefa);
+            IEnumerable<ReadHistoricoTarefaDto> readDto = _mapper.Map<IEnumerable<ReadHistoricoTarefaDto>>(historico);
 
             if (readDto == null)
-                return NotFound(new { Error = Textos.NaoNulo("Histórico")} );
+                return NotFound(new { Error = Textos.NaoNulo("Histórico") });
 
             return Ok(readDto);
         }
@@ -55,10 +55,9 @@ namespace TrilhaApiDesafio.Controllers
         public IActionResult Criar(HistoricoTarefa historico)
         {
             if (historico == null)
-                return BadRequest(new { Error = Textos.NaoNulo("Histórico")});
+                return BadRequest(new { Error = Textos.NaoNulo("Histórico") });
 
-            _context.HistoricoTarefas.Add(historico);
-            _context.SaveChanges();
+            _historico.Criar(historico);
 
             return CreatedAtAction(nameof(historico), new { id = historico.Id}, historico);
         }

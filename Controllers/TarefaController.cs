@@ -4,6 +4,7 @@ using TrilhaApiDesafio.Models;
 using TrilhaApiDesafio.Entities;
 using AutoMapper;
 using TrilhaApiDesafio.Dtos;
+using TrilhaApiDesafio.Services;
 
 namespace TrilhaApiDesafio.Controllers
 {
@@ -17,20 +18,23 @@ namespace TrilhaApiDesafio.Controllers
     {
         private readonly OrganizadorContext _context;
         private IMapper _mapper;
-        private FuncionarioController _funcionarioController;
-        private HistoricoTarefaController _historicoTarefaController;
+        private ITarefaService _tarefa;
+        private IFuncionarioService _funcionario;
+        private IHistoricoTarefaService _historico;
 
         /// <summary>
         /// Construtor da controller funcionario, passa o context para a propriedade _context e instancia dois objetos, o _funcionarioController
         /// e _historicoTarefaController. 
         /// </summary>
         /// <param name="context">Contexto passado a controller.</param>
-        public TarefaController(OrganizadorContext context, IMapper mapper)
+        public TarefaController(OrganizadorContext context, IMapper mapper, ITarefaService tarefa, IFuncionarioService funcionario,
+                                IHistoricoTarefaService historico)
         {
             _context = context;
             _mapper = mapper;
-            _funcionarioController = new FuncionarioController(context, mapper);
-            _historicoTarefaController = new HistoricoTarefaController(context, mapper);
+            _tarefa = tarefa;
+            _funcionario = funcionario;
+            _historico = historico;
         }
 
         /// <summary>
@@ -41,8 +45,7 @@ namespace TrilhaApiDesafio.Controllers
         [HttpGet("{id}")]
         public IActionResult ObterPorId(int id)
         {
-            Tarefa tarefa = _context.Tarefas.Find(id);
-            ReadTarefaDtos readDto = _mapper.Map<ReadTarefaDtos>(tarefa);
+            ReadTarefaDtos readDto = _tarefa.ObterPorId(id);
 
             if (readDto == null)
                 return NotFound(new { Error = Textos.NaoEncontrado("Tarefa") });
@@ -57,14 +60,14 @@ namespace TrilhaApiDesafio.Controllers
         [HttpGet("ObterTodos")]
         public IActionResult ObterTodos()
         {
-            var tarefa = _context.Tarefas;
+            var tarefa = _tarefa.ObterTodos();
 
             if (tarefa == null)
                 return NotFound(new { Error = Textos.NaoCadastrado("Tarefa") });
             
             return Ok(tarefa);
         }
-
+        
         /// <summary>
         /// Método GET, obtém a tarefa pelo seu título.
         /// </summary>
@@ -73,10 +76,10 @@ namespace TrilhaApiDesafio.Controllers
         [HttpGet("ObterPorTitulo")]
         public IActionResult ObterPorTitulo(string titulo)
         {
-            var tarefa = _context.Tarefas.Where(x => x.Titulo.Contains(titulo));
+            var tarefa = _tarefa.ObterPorTitulo(titulo);
 
-            if (tarefa.Count() == 0)
-                return NotFound(new { Error = Textos.NaoEncontrado("Tarefa") });
+            if (tarefa == null)
+                return NotFound(new { Error = Textos.NaoNulo("Tarefa") });
             
             return Ok(tarefa);
         }
@@ -89,9 +92,9 @@ namespace TrilhaApiDesafio.Controllers
         [HttpGet("ObterPorData")]
         public IActionResult ObterPorData(DateTime data)
         {
-            var tarefa = _context.Tarefas.Where(x => x.Data.Date == data.Date);
-            if (tarefa.Count() == 0)
-                return NotFound(new {Error = Textos.NaoEncontrado("Tarefa") });
+            var tarefa = _tarefa.ObterPorData(data);
+            if (tarefa == null)
+                return NotFound(new {Error = Textos.NaoNulo("Tarefa") });
             
             return Ok(tarefa);
         }
@@ -104,7 +107,7 @@ namespace TrilhaApiDesafio.Controllers
         [HttpGet("ObterPorStatus")]
         public IActionResult ObterPorStatus(EnumStatusTarefa status)
         {
-            var tarefa = _context.Tarefas.Where(x => x.Status == status);
+            var tarefa = _tarefa.ObterPorStatus(status);
 
             if (tarefa.Count() == 0)
                 return NotFound(new { Error = Textos.NaoEncontrado("Tarefa") });
@@ -120,12 +123,15 @@ namespace TrilhaApiDesafio.Controllers
         [HttpGet("ObterResponsavel/{id}")]
         public IActionResult ObterResponsavel(int id)
         {
-            var tarefa = _context.Tarefas.Find(id);
+            Funcionario funcionario = _tarefa.ObterResponsavel(id);
 
-            if (tarefa == null)
-                return NotFound(new { Error = Textos.NaoEncontrado("Tarefa") });
+            if (funcionario.Id == 0)
+                return NotFound(new { Error = Textos.NaoSelecionado("Funcionário") });
 
-            return _funcionarioController.ObterPorId(tarefa.FuncionarioId);
+            if (funcionario == null)
+                return NotFound(new { Error = Textos.NaoEncontrado("Funcionário") });
+
+            return Ok(funcionario);
         }
 
         /// <summary>
@@ -144,9 +150,8 @@ namespace TrilhaApiDesafio.Controllers
             else if (dataRecebida < dataAtual)
                 return BadRequest(new { Error = Textos.DataMenorQueAtual() });
 
-            _context.Add(tarefa);
-            _context.SaveChanges();
-            _historicoTarefaController.Criar(new HistoricoTarefa(tarefa.Id, tarefa.FuncionarioId, tarefa.Status));
+            _tarefa.Criar(tarefa);
+            _historico.Criar(new HistoricoTarefa(tarefa.Id, tarefa.FuncionarioId, tarefa.Status));
 
             return CreatedAtAction(nameof(ObterPorId), new { id = tarefa.Id }, tarefa);
         }
@@ -160,8 +165,8 @@ namespace TrilhaApiDesafio.Controllers
         [HttpPut("{id}")]
         public IActionResult Atualizar(int id, Tarefa tarefa)
         {
-            var tarefaBanco = _context.Tarefas.Find(id);
-            var funcionarioNovo = _context.Funcionarios.Find(tarefa.FuncionarioId);
+            Tarefa tarefaBanco = _mapper.Map<Tarefa>(_tarefa.ObterPorId(id));
+            var funcionarioNovo = _tarefa.ObterResponsavel(id);
             DateOnly dataAtual = DateOnly.FromDateTime(DateTime.Now);
             DateOnly dataRecebida = DateOnly.FromDateTime(tarefa.Data);
 
@@ -171,21 +176,14 @@ namespace TrilhaApiDesafio.Controllers
                 return BadRequest(new { Erro = Textos.DataMenorQueMinimo() });
             else if (dataRecebida < dataAtual)
                 return BadRequest(new { Error = Textos.DataMenorQueAtual() });
-
-            tarefaBanco.Titulo = tarefa.Titulo;
-            tarefaBanco.Data = tarefa.Data;
-            tarefaBanco.Descricao = tarefa.Descricao;
-            tarefaBanco.Status = tarefa.Status;
-
-            if (tarefa.FuncionarioId == 0)
+            else if (tarefa.FuncionarioId == 0)
                 tarefaBanco.FuncionarioId = 0;
             else if (funcionarioNovo == null)
                 return NotFound(new { Error = Textos.NaoEncontrado("Funcionário") });
             else
-                tarefaBanco.FuncionarioId = tarefa.FuncionarioId;
+                _tarefa.Atualizar(id, tarefaBanco);
 
-            _context.SaveChanges();
-            _historicoTarefaController.Criar(new HistoricoTarefa(id, tarefa.FuncionarioId, tarefa.Status));
+            _historico.Criar(new HistoricoTarefa(id, tarefa.FuncionarioId, tarefa.Status));
 
             return NoContent();
         }
@@ -199,13 +197,10 @@ namespace TrilhaApiDesafio.Controllers
         [HttpPatch("AtualizarTitulo/{id}")]
         public IActionResult AtualizarTitulo(int id, string titulo)
         {
-            var tarefaBanco = _context.Tarefas.Find(id);
+            var tarefa = _tarefa.AtualizarTitulo(id, titulo);
 
-            if (tarefaBanco == null)
+            if (tarefa == null)
                 return NotFound(new { Error = Textos.NaoEncontrado("Tarefa") });
-
-            tarefaBanco.Titulo = titulo;
-            _context.SaveChanges();
 
             return NoContent();
         }
@@ -219,15 +214,13 @@ namespace TrilhaApiDesafio.Controllers
         [HttpPatch("AtualizarDescricao/{id}")]
         public IActionResult AtualizarDescricao(int id, string descricao)
         {
-            var tarefaBanco = _context.Tarefas.Find(id);
+            if (descricao == null)
+                descricao = "";
+
+            var tarefaBanco = _tarefa.AtualizarDescricao(id, descricao);
 
             if (tarefaBanco == null)
                 return NotFound(new { Error = Textos.NaoEncontrado("Tarefa") });
-            else if (descricao == null)
-                return BadRequest(new { Error = Textos.NaoNulo("Descrição") });
-
-            tarefaBanco.Descricao = descricao;
-            _context.SaveChanges();
 
             return NoContent();
         }
@@ -241,19 +234,18 @@ namespace TrilhaApiDesafio.Controllers
         [HttpPatch("AtualizarData/{id}")]
         public IActionResult AtualizarData(int id, DateTime data)
         {
-            var tarefaBanco = _context.Tarefas.Find(id);
             DateOnly dataAtual = DateOnly.FromDateTime(DateTime.Now);
             DateOnly dataRecebida = DateOnly.FromDateTime(data);
-
-            if (tarefaBanco == null)
-                return NotFound(new { Error = Textos.NaoEncontrado("Tarefa") });
-            else if (data == null)
+            
+            if (data == null)
                 return BadRequest(new { Error = Textos.NaoNulo("Data") });
             else if (dataRecebida < dataAtual)
                 return BadRequest(new { Error = Textos.DataMenorQueAtual() });
 
-            tarefaBanco.Data = data;
-            _context.SaveChanges();
+            Tarefa tarefa = _tarefa.AtualizarData(id, data);
+
+            if (tarefa == null)
+                return NotFound(new { Error = Textos.NaoEncontrado("Tarefa") });
 
             return NoContent();
         }
@@ -267,20 +259,16 @@ namespace TrilhaApiDesafio.Controllers
         [HttpPatch("AtualizarFuncionario/{id}")] //Trocar esse nome
         public IActionResult AtualizarFuncionario(int id, int idFuncionario)
         {
-            var tarefaBanco = _context.Tarefas.Find(id);
-            var funcionarioNovo = _context.Funcionarios.Find(idFuncionario);
+            var tarefaBanco = _tarefa.ObterPorId(id);
+            var funcionarioNovo = _funcionario.ObterPorId(idFuncionario);
 
             if (tarefaBanco == null)
                 return NotFound(new { Error = Textos.NaoEncontrado("Tarefa") });
-            else if (idFuncionario == 0)
-                tarefaBanco.FuncionarioId = 0;
-            else if (funcionarioNovo == null)
+            else if (funcionarioNovo == null && idFuncionario != 0)
                 return NotFound(new { Error = Textos.NaoEncontrado("Funcionário") });
-            else
-                tarefaBanco.FuncionarioId = funcionarioNovo.Id;
-                
-            _context.SaveChanges();
-            _historicoTarefaController.Criar(new HistoricoTarefa(id, tarefaBanco.FuncionarioId, tarefaBanco.Status));
+
+            _tarefa.AtualizarFuncionario(id, idFuncionario);
+            _historico.Criar(new HistoricoTarefa(id, tarefaBanco.FuncionarioId, tarefaBanco.Status));
 
             return NoContent();
         }
@@ -294,17 +282,15 @@ namespace TrilhaApiDesafio.Controllers
         [HttpPatch("AtualizarStatus/{id}")]
         public IActionResult AtualizarStatus(int id, EnumStatusTarefa status)
         {
-            var tarefaBanco = _context.Tarefas.Find(id);
-            var funcionarioBanco = tarefaBanco.FuncionarioId;
+            var tarefaBanco = _tarefa.AtualizarStatus(id, status);
 
             if (tarefaBanco == null)
                 return NotFound(new { Error = Textos.NaoEncontrado("Tarefa") });
-            else if (funcionarioBanco == 0)
+            else if (tarefaBanco.FuncionarioId == 0)
                 return BadRequest(new { Error = Textos.NaoSelecionado("Funcionário") });
 
-            tarefaBanco.Status = status;
-            _context.SaveChanges();
-            _historicoTarefaController.Criar(new HistoricoTarefa(id, funcionarioBanco, status));
+            
+            _historico.Criar(new HistoricoTarefa(id, tarefaBanco.FuncionarioId, status));
 
             return NoContent();
         }
@@ -317,14 +303,13 @@ namespace TrilhaApiDesafio.Controllers
         [HttpDelete("{id}")]
         public IActionResult Deletar(int id)
         {
-            var tarefaBanco = _context.Tarefas.Find(id);
+            var tarefaBanco = _mapper.Map<Tarefa>(_tarefa.ObterPorId(id));
 
             if (tarefaBanco == null)
                 return NotFound(new { Error = Textos.NaoEncontrado("Tarefa") });
 
-            _historicoTarefaController.Criar(new HistoricoTarefa(tarefaBanco.Id, tarefaBanco.FuncionarioId, tarefaBanco.Status));
-            _context.Tarefas.Remove(tarefaBanco);
-            _context.SaveChanges();
+            _historico.Criar(new HistoricoTarefa(tarefaBanco.Id, tarefaBanco.FuncionarioId, tarefaBanco.Status));
+            _tarefa.Deletar(id);
 
             return NoContent();
         }
